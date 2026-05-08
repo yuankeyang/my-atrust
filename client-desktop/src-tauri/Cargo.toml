@@ -1,0 +1,13 @@
+[package]
+name = "client-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+trust-client.workspace = true
+
+[build-dependencies]
+tauri.workspace = true

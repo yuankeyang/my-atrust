@@ -1,0 +1,79 @@
+{
+  "$schema": "./config.schema.json",
+  "version": "1.0.0",
+
+  "controller": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "tls": {
+      "enabled": true,
+      "cert_path": "/etc/atrusted/tls/server.crt",
+      "key_path": "/etc/atrusted/tls/server.key"
+    }
+  },
+
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 8443,
+    "spa_port": 8883,
+    "tls": {
+      "enabled": true,
+      "cert_path": "/etc/atrusted/tls/gateway.crt",
+      "key_path": "/etc/atrusted/tls/gateway.key"
+    }
+  },
+
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "atrusted",
+    "user": "atrusted",
+    "password": "changeme",
+    "max_connections": 20
+  },
+
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "password": "",
+    "db": 0,
+    "blacklist_ttl_seconds": 3600
+  },
+
+  "auth": {
+    "jwt_secret": "changeme-min-32-chars-long!!",
+    "jwt_expiry_seconds": 3600,
+    "refresh_token_expiry_seconds": 604800,
+    "totp_issuer": "ATrust-ZTNA",
+    "oauth2": {
+      "providers": []
+    }
+  },
+
+  "policy": {
+    "cache_max_entries": 10000,
+    "cache_ttl_seconds": 300,
+    "eval_max_batch_size": 100
+  },
+
+  "observability": {
+    "tracing": {
+      "enabled": true,
+      "endpoint": "http://localhost:4317",
+      "service_name": "atrusted"
+    },
+    "metrics": {
+      "enabled": true,
+      "port": 9090
+    }
+  },
+
+  "interceptor": {
+    "mode": "ebpf",
+    "fallback_mode": "iptables",
+    "ebpf": {
+      "map_size": 65536,
+      "program_array_size": 32
+    }
+  }
+}

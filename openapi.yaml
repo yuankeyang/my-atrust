@@ -1,0 +1,1493 @@
+openapi: 3.1.0
+info:
+  title: ATrust-ZTNA Control Plane API
+  description: |
+    ATrust-ZTNA 控制面 REST API，基于 OpenSpec SDD 规范开发。
+    所有接口遵循契约先行原则，变更需通过 openapi-diff 校验。
+  version: "1.0.0"
+  contact:
+    name: ATrust Engineering
+    email: engineering@atrusted.io
+
+servers:
+  - url: https://api.atrusted.io/v1
+    description: 生产环境
+  - url: https://api-staging.atrusted.io/v1
+    description: 预发环境
+  - url: https://localhost:8443/v1
+    description: 本地开发
+
+tags:
+  - name: Authentication
+    description: 身份认证与令牌管理
+  - name: Device
+    description: 设备注册与可信评估
+  - name: Policy
+    description: 访问策略管理
+  - name: Session
+    description: 会话生命周期管理
+  - name: Admin
+    description: 管理接口（仅管理员）
+
+paths:
+  # ==================== 认证模块 ====================
+  /auth/token:
+    post:
+      tags: [Authentication]
+      operationId: createToken
+      summary: 申请访问令牌
+      description: |
+        支持多种认证方式：
+        - client_credentials: 客户端凭据（设备注册）
+        - password: 用户名密码（仅内部）
+        - authorization_code: OAuth2 授权码
+        - refresh_token: 刷新令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        "200":
+          description: 成功返回令牌
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+                format: uuid
+              description: 请求追踪ID
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/token/verify:
+    post:
+      tags: [Authentication]
+      operationId: verifyToken
+      summary: 验证令牌有效性
+      description: 网关调用此接口验证 JWT 令牌合法性
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyTokenRequest'
+      responses:
+        "200":
+          description: 令牌有效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyTokenResponse'
+        "401":
+          description: 令牌无效或已过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/mfa/setup:
+    post:
+      tags: [Authentication]
+      operationId: setupMfa
+      summary: 初始化 MFA
+      description: 为当前用户设置 MFA（TOTP/HOTP）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  type: string
+                  enum: [totp, hotp, sms]
+                  description: MFA方式
+      responses:
+        "200":
+          description: MFA 初始化成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaSetupResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/mfa/verify:
+    post:
+      tags: [Authentication]
+      operationId: verifyMfa
+      summary: 验证 MFA 码
+      description: 验证 MFA 一次性密码，完成二次认证
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_token, code]
+              properties:
+                session_token:
+                  type: string
+                  description: MFA 会话token
+                code:
+                  type: string
+                  pattern: "^[0-9]{6,8}$"
+                  description: MFA验证码
+      responses:
+        "200":
+          description: MFA验证通过
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: 登出
+      description: 撤销当前会话，清理服务端会话状态
+      responses:
+        "204":
+          description: 登出成功
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== 设备模块 ====================
+  /devices/register:
+    post:
+      tags: [Device]
+      operationId: registerDevice
+      summary: 注册设备
+      description: |
+        客户端首次安装时注册设备，上报设备指纹。
+        返回设备证书用于后续 mTLS 认证。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegistration'
+      responses:
+        "201":
+          description: 设备注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistrationResponse'
+        "409":
+          description: 设备已注册
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{device_id}:
+    get:
+      tags: [Device]
+      operationId: getDevice
+      summary: 获取设备信息
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        "200":
+          description: 设备信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Device]
+      operationId: deleteDevice
+      summary: 注销设备
+      description: 撤销设备证书，移除设备信任
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        "204":
+          description: 设备注销成功
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /devices/{device_id}/posture:
+    post:
+      tags: [Device]
+      operationId: reportPosture
+      summary: 上报设备可信状态
+      description: |
+        客户端周期性上报设备安全状态（杀软/OS补丁/磁盘加密等）。
+        Controller 返回风险评分和策略建议。
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePostureReport'
+      responses:
+        "200":
+          description: 状态评估完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostureAssessment'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /devices/{device_id}/posture/policy:
+    get:
+      tags: [Device]
+      operationId: getDevicePosturePolicy
+      summary: 获取设备专属策略
+      description: |
+        获取针对此设备的访问策略（含设备风险等级相关的条件判断）。
+        此接口用于网关实时拉取最新策略。
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: session_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 设备专属策略
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicePosturePolicy'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== 策略模块 ====================
+  /policies:
+    get:
+      tags: [Policy]
+      operationId: listPolicies
+      summary: 列举策略
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: group
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 策略列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Policy]
+      operationId: createPolicy
+      summary: 创建策略
+      description: |
+        创建新的访问策略。
+        支持最小权限原则的应用级粒度控制。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreate'
+      responses:
+        "201":
+          description: 策略创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          description: 策略ID冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policies/{policy_id}:
+    get:
+      tags: [Policy]
+      operationId: getPolicy
+      summary: 获取策略详情
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        "200":
+          description: 策略详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Policy]
+      operationId: updatePolicy
+      summary: 更新策略
+      description: |
+        完整更新策略（幂等）。
+        更新后自动推送到相关网关（p99 < 50µs 热更新）。
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdate'
+      responses:
+        "200":
+          description: 策略更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Policy]
+      operationId: deletePolicy
+      summary: 删除策略
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        "204":
+          description: 策略删除成功
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          description: 策略被引用，无法删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policies/{policy_id}/publish:
+    post:
+      tags: [Policy]
+      operationId: publishPolicy
+      summary: 发布策略
+      description: 将策略从草稿状态发布到生产环境
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        "200":
+          description: 发布成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy_id:
+                    type: string
+                  version:
+                    type: string
+                  published_at:
+                    type: string
+                    format: date-time
+
+  # ==================== 会话模块 ====================
+  /sessions:
+    get:
+      tags: [Session]
+      operationId: listSessions
+      summary: 列举活跃会话
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: device_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, expired, revoked]
+      responses:
+        "200":
+          description: 会话列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+
+  /sessions/{session_id}:
+    get:
+      tags: [Session]
+      operationId: getSession
+      summary: 获取会话详情
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        "200":
+          description: 会话详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Session]
+      operationId: revokeSession
+      summary: 撤销会话
+      description: 立即终止指定会话，清理服务端状态
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        "204":
+          description: 会话撤销成功
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{session_id}/heartbeat:
+    post:
+      tags: [Session]
+      operationId: sessionHeartbeat
+      summary: 会话心跳
+      description: |
+        客户端每30秒发送一次心跳。
+        超时3次未收到心跳则标记会话为失活。
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_status:
+                  type: string
+                  enum: [normal, suspicious, compromised]
+      responses:
+        "200":
+          description: 心跳确认
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next_heartbeat_after:
+                    type: integer
+                    description: 下次心跳间隔（秒）
+                    example: 30
+                  server_time:
+                    type: string
+                    format: date-time
+
+  /sessions/events:
+    get:
+      tags: [Session]
+      operationId: getSessionEvents
+      summary: 获取会话事件流
+      description: |
+        服务端推送（SSE）通道，用于网关实时接收会话事件
+        （撤销/策略变更/风险告警）。
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 仅返回此时间之后的事件
+      responses:
+        "200":
+          description: SSE事件流
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SessionEvent'
+
+  # ==================== 管理模块 ====================
+  /admin/users:
+    get:
+      tags: [Admin]
+      operationId: listUsers
+      summary: 列举用户
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Admin]
+      operationId: createUser
+      summary: 创建用户
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        "201":
+          description: 用户创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /admin/gateways:
+    get:
+      tags: [Admin]
+      operationId: listGateways
+      summary: 列举网关
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: 网关列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayListResponse'
+
+    post:
+      tags: [Admin]
+      operationId: registerGateway
+      summary: 注册网关
+      description: 新增网关节点，加入网关集群
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRegistration'
+      responses:
+        "201":
+          description: 网关注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gateway'
+
+  /admin/gateways/{gateway_id}/status:
+    put:
+      tags: [Admin]
+      operationId: updateGatewayStatus
+      summary: 更新网关状态
+      description: 启用/禁用/维护网关节点
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: gateway_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, maintenance, disabled]
+      responses:
+        "200":
+          description: 状态更新成功
+
+  /admin/audit-log:
+    get:
+      tags: [Admin]
+      operationId: getAuditLog
+      summary: 获取审计日志
+      description: 分页查询操作审计日志
+      security:
+        - AdminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: 审计日志列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT 访问令牌
+
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员JWT（需包含 admin:true claim）
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 设备唯一标识
+
+    PolicyId:
+      name: policy_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 策略唯一标识
+
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 会话唯一标识
+
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: "Invalid request parameters"
+            instance: "/auth/token"
+            errors:
+              - field: grant_type
+                message: "Unsupported grant_type"
+
+    Unauthorized:
+      description: 未认证或认证失效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: 无权限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    TooManyRequests:
+      description: 请求过于频繁
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            description: 多少秒后重试
+
+  schemas:
+    # ==================== 通用 ====================
+    ErrorResponse:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: RFC 7807 type
+        title:
+          type: string
+          description: 错误标题
+        status:
+          type: integer
+          description: HTTP状态码
+        detail:
+          type: string
+          description: 错误详情
+        instance:
+          type: string
+          format: uri
+          description: 错误发生的请求路径
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    # ==================== 认证 ====================
+    TokenRequest:
+      type: object
+      required: [grant_type]
+      discriminator:
+        propertyName: grant_type
+        mapping:
+          client_credentials: ClientCredentialsGrant
+          password: PasswordGrant
+          authorization_code: AuthorizationCodeGrant
+          refresh_token: RefreshTokenGrant
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials, password, authorization_code, refresh_token]
+
+    ClientCredentialsGrant:
+      type: object
+      required: [client_id, client_secret]
+      properties:
+        client_id:
+          type: string
+        client_secret:
+          type: string
+          format: password
+
+    PasswordGrant:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        mfa_session_token:
+          type: string
+          description: MFA验证后的会话token
+
+    AuthorizationCodeGrant:
+      type: object
+      required: [code, redirect_uri, code_verifier]
+      properties:
+        code:
+          type: string
+        redirect_uri:
+          type: string
+          format: uri
+        code_verifier:
+          type: string
+          description: PKCE code_verifier
+
+    RefreshTokenGrant:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: JWT访问令牌
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: 有效期（秒）
+          example: 900
+        refresh_token:
+          type: string
+          description: 刷新令牌（首次认证时返回）
+        scope:
+          type: string
+          description: 授权范围
+
+    VerifyTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    VerifyTokenResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        sub:
+          type: string
+          format: uuid
+          description: 用户ID
+        device_id:
+          type: string
+          format: uuid
+        scope:
+          type: string
+        exp:
+          type: integer
+          format: unix-time
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    MfaSetupResponse:
+      type: object
+      properties:
+        session_token:
+          type: string
+          description: MFA会话token（后续验证时需携带）
+        method:
+          type: string
+          enum: [totp, hotp, sms]
+        provisioning_uri:
+          type: string
+          format: uri
+          description: TOTP provisioning URI（otpauth://）
+        qr_code_base64:
+          type: string
+          contentMediaType: image/png
+          description: Base64编码的二维码图片
+
+    # ==================== 设备 ====================
+    DeviceRegistration:
+      type: object
+      required: [device_type, fingerprint]
+      properties:
+        device_type:
+          type: string
+          enum: [windows, macos, linux, ios, android]
+        fingerprint:
+          type: object
+          required: [hash]
+          properties:
+            hash:
+              type: string
+              description: 设备指纹SHA256哈希
+            os_version:
+              type: string
+            model:
+              type: string
+        public_key:
+          type: string
+          description: 客户端证书公钥（PEM或裸DER）
+
+    DeviceRegistrationResponse:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+        certificate:
+          type: string
+          description: X.509设备证书（PEM）
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        device_type:
+          type: string
+          enum: [windows, macos, linux, ios, android]
+        fingerprint:
+          type: object
+        status:
+          type: string
+          enum: [registered, active, suspended, revoked]
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        last_seen:
+          type: string
+          format: date-time
+        registered_at:
+          type: string
+          format: date-time
+
+    DevicePostureReport:
+      type: object
+      required: [checks]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostureCheck'
+
+    PostureCheck:
+      type: object
+      required: [check_type, result]
+      properties:
+        check_type:
+          type: string
+          enum:
+            - antivirus_enabled
+            - antivirus_updated
+            - disk_encrypted
+            - os_patched
+            - screen_locked
+            - jailbreak_detected
+            - debugger_detected
+            - corporate_wifi
+        result:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties: true
+          description: 检查详情（杀软名称、病毒库日期、补丁KB等）
+
+    PostureAssessment:
+      type: object
+      properties:
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        failed_checks:
+          type: array
+          items:
+            type: string
+        policy_action:
+          type: string
+          enum: [ALLOW, MFA_REQUIRED, RESTRICTED, BLOCK]
+          description: 基于 posture 的策略建议
+
+    DevicePosturePolicy:
+      type: object
+      properties:
+        version:
+          type: string
+        device_id:
+          type: string
+          format: uuid
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+
+    # ==================== 策略 ====================
+    Policy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+          description: 优先级（数值越小越优先）
+        status:
+          type: string
+          enum: [draft, published, archived]
+        subject:
+          $ref: '#/components/schemas/PolicySubject'
+        resource:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyResource'
+        action:
+          type: string
+          enum: [ALLOW, DENY, MFA_REQUIRED, BLOCK]
+        conditions:
+          $ref: '#/components/schemas/PolicyConditions'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    PolicyCreate:
+      type: object
+      required: [name, subject, resource, action]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 可选，指定ID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        description:
+          type: string
+        priority:
+          type: integer
+          default: 100
+        subject:
+          $ref: '#/components/schemas/PolicySubject'
+        resource:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PolicyResource'
+        action:
+          type: string
+          enum: [ALLOW, DENY, MFA_REQUIRED, BLOCK]
+        conditions:
+          $ref: '#/components/schemas/PolicyConditions'
+
+    PolicyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+        subject:
+          $ref: '#/components/schemas/PolicySubject'
+        resource:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyResource'
+        action:
+          type: string
+          enum: [ALLOW, DENY, MFA_REQUIRED, BLOCK]
+        conditions:
+          $ref: '#/components/schemas/PolicyConditions'
+
+    PolicySubject:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            type: string
+            format: uuid
+        groups:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
+
+    PolicyResource:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [application, host, cidr, port]
+        id:
+          type: string
+          description: 应用ID（如 "gitlab.internal"）
+        host:
+          type: string
+        cidr:
+          type: string
+          format: ipv4-cidr
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        path:
+          type: string
+          description: URL路径前缀（用于HTTP应用）
+
+    PolicyConditions:
+      type: object
+      properties:
+        device_posture:
+          type: object
+          properties:
+            min_score:
+              type: integer
+              minimum: 0
+              maximum: 100
+            required_checks:
+              type: array
+              items:
+                type: string
+                enum:
+                  - antivirus_enabled
+                  - antivirus_updated
+                  - disk_encrypted
+                  - os_patched
+                  - screen_locked
+        require_mfa:
+          type: boolean
+        valid_hours:
+          type: string
+          pattern: "^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$"
+          example: "09:00-18:00"
+        ip_whitelist:
+          type: array
+          items:
+            type: string
+
+    PolicyRule:
+      type: object
+      description: 下发到网关/客户端的精简策略格式
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+        subject_uid:
+          type: integer
+          description: 用户UID（内核使用）
+        dest_ip:
+          type: integer
+          description: 目标IP（网络字节序）
+        dest_port:
+          type: integer
+        action:
+          type: integer
+          description: "0=ALLOW, 1=PROXY, 2=BLOCK, 3=MFA"
+        session_bind:
+          type: boolean
+
+    PolicyListResponse:
+      type: object
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== 会话 ====================
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        gateway_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, inactive, revoked, expired]
+        risk_score:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        last_activity:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        client_ip:
+          type: string
+          description: 客户端IP
+
+    SessionListResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    SessionEvent:
+      type: object
+      properties:
+        event_type:
+          type: string
+          enum:
+            - session_revoked
+            - session_expired
+            - policy_changed
+            - risk_alert
+            - device_compromised
+        session_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+    # ==================== 管理 ====================
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        groups:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, disabled]
+
+    UserCreate:
+      type: object
+      required: [username, email]
+      properties:
+        username:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{3,32}$"
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 12
+        groups:
+          type: array
+          items:
+            type: string
+
+    UserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Gateway:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        status:
+          type: string
+          enum: [active, maintenance, disabled]
+        version:
+          type: string
+        last_heartbeat:
+          type: string
+          format: date-time
+        load:
+          type: number
+          format: float
+
+    GatewayRegistration:
+      type: object
+      required: [name, host, port]
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+          default: 443
+        public_key:
+          type: string
+          description: 网关心册公钥
+
+    GatewayListResponse:
+      type: object
+      properties:
+        gateways:
+          type: array
+          items:
+            $ref: '#/components/schemas/Gateway'
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        resource:
+          type: string
+        ip:
+          type: string
+        result:
+          type: string
+          enum: [success, failure]
+
+    AuditLogResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        pagination:
+          $ref: '#/components/schemas/Pagination'

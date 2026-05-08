@@ -1,0 +1,34 @@
+[package]
+name = "trust-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "trust_client"
+crate-type = ["lib"]
+
+[dependencies]
+trust-core.workspace = true
+
+# Web framework
+reqwest.workspace = true
+
+# Crypto
+rustls.workspace = true
+
+# SPA
+totp-rs.workspace = true
+
+# Tauri
+tauri.workspace = true
+tauri-plugin-shell.workspace = true
+
+# Utils
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+secrecy.workspace = true

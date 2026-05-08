@@ -1,0 +1,23 @@
+[package]
+name = "interceptor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+
+[dependencies]
+trust-core.workspace = true
+
+# eBPF
+aya.workspace = true
+memoffset.workspace = true
+libbpf-sys.workspace = true
+
+# Utils
+tokio.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true

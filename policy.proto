@@ -1,0 +1,180 @@
+// ATrust-ZTNA Policy Synchronization Protocol
+// 版本: 1.0.0
+// 遵循 OpenSpec SDD 规范
+// gRPC 通道，用于 Controller -> Gateway 策略下发与设备 posture 上报
+
+syntax = "proto3";
+
+package atrusted.policy.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ==================== 策略同步服务 ====================
+
+service PolicySync {
+  // 网关启动时拉取全量策略
+  rpc SyncPolicies(SyncPoliciesRequest) returns (SyncPoliciesResponse);
+
+  // 订阅增量策略更新（Server-side Streaming）
+  rpc SubscribePolicyUpdates(SubscribeRequest) returns (stream PolicyUpdate);
+
+  // 设备 posture 周期性上报
+  rpc ReportDevicePosture(stream PostureReport) returns (PostureAcknowledgement);
+
+  // 会话事件上报（客户端 -> Controller）
+  rpc ReportSessionEvent(SessionEventReport) returns (SessionEventAck);
+
+  // 推送会话撤销命令（Controller -> Gateway）
+  rpc PushSessionRevocation(SessionRevocationCommand) returns (RevocationAck);
+}
+
+// ==================== 策略结构 ====================
+
+message PolicyRule {
+  string rule_id = 1;
+  uint32 priority = 2;           // 优先级（越小越高）
+  uint32 subject_uid = 3;        // 用户UID（内核Map使用）
+  uint32 dest_ip = 4;            // 目标IPv4（网络字节序）
+  uint32 dest_mask = 5;          // CIDR mask (e.g., 24)
+  uint32 dest_port = 6;         // 目标端口（网络字节序）
+  PolicyAction action = 7;
+  bool session_bind = 8;         // 是否绑定会话
+  map<string, string> metadata = 9; // 额外元数据
+}
+
+enum PolicyAction {
+  POLICY_ACTION_UNSPECIFIED = 0;
+  POLICY_ACTION_ALLOW = 1;       // 放行
+  POLICY_ACTION_PROXY = 2;      // 代理（重定向到本地端口）
+  POLICY_ACTION_BLOCK = 3;      // 阻断
+  POLICY_ACTION_MFA = 4;        // 需要MFA
+  POLICY_ACTION_LOGONLY = 5;     // 仅记录（不断开）
+}
+
+message PolicyBundle {
+  string version = 1;            // 策略版本（语义版本）
+  google.protobuf.Timestamp generated_at = 2;
+  repeated PolicyRule rules = 3;
+  map<string, uint32> user_index = 4;  // user_id hash -> uid（内核查找用）
+}
+
+// ==================== 设备 Posture ====================
+
+message PostureReport {
+  string session_id = 1;
+  string device_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  repeated PostureCheckResult checks = 4;
+  DeviceRiskLevel risk_level = 5;
+  uint32 risk_score = 6;          // 0-100
+}
+
+message PostureCheckResult {
+  string check_type = 1;
+  bool passed = 2;
+  google.protobuf.Struct metadata = 3; // 检查详情（JSON）
+}
+
+enum DeviceRiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_LOW = 1;
+  RISK_LEVEL_MEDIUM = 2;
+  RISK_LEVEL_HIGH = 3;
+  RISK_LEVEL_CRITICAL = 4;
+}
+
+message PostureAcknowledgement {
+  bool accepted = 1;
+  string session_id = 2;
+  uint32 new_risk_score = 3;
+  DeviceRiskLevel recommended_action = 4;
+}
+
+// ==================== 会话事件 ====================
+
+message SessionEventReport {
+  string session_id = 1;
+  string device_id = 2;
+  string user_id = 3;
+  SessionEventType event_type = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  google.protobuf.Struct event_data = 6; // 事件详情（JSON）
+}
+
+enum SessionEventType {
+  SESSION_EVENT_UNSPECIFIED = 0;
+  SESSION_EVENT_CREATED = 1;
+  SESSION_EVENT_HEARTBEAT = 2;
+  SESSION_EVENT_TERMINATED = 3;
+  SESSION_EVENT_RISK_CHANGE = 4;
+  SESSION_EVENT_ANOMALY = 5;
+  SESSION_EVENT_POLICY_CHANGE = 6;
+}
+
+message SessionEventAck {
+  bool received = 1;
+  string session_id = 2;
+}
+
+// ==================== 会话撤销 ====================
+
+message SessionRevocationCommand {
+  string session_id = 1;
+  string user_id = 2;
+  string device_id = 3;
+  RevocationReason reason = 4;
+  google.protobuf.Timestamp issued_at = 5;
+}
+
+enum RevocationReason {
+  REVOCATION_REASON_UNSPECIFIED = 0;
+  REVOCATION_REASON_ADMIN = 1;           // 管理员手动撤销
+  REVOCATION_REASON_LOGOUT = 2;          // 用户登出
+  REVOCATION_REASON_POLICY_CHANGE = 3;   // 策略变更导致失效
+  REVOCATION_REASON_RISK_DETECTED = 4;   // 检测到风险
+  REVOCATION_REASON_DEVICE_REVOKED = 5;  // 设备被注销
+  REVOCATION_REASON_EXPIRED = 6;         // 会话过期
+}
+
+message RevocationAck {
+  bool success = 1;
+  string session_id = 2;
+  string gateway_id = 3;
+}
+
+// ==================== 消息定义 ====================
+
+message SyncPoliciesRequest {
+  string gateway_id = 1;
+  string current_version = 2;  // 当前版本（空=全量拉取）
+  map<string, string> capabilities = 3; // 网关能力矩阵
+}
+
+message SyncPoliciesResponse {
+  bool is_incremental = 1;
+  PolicyBundle bundle = 2;           // 全量策略
+  repeated PolicyRule deleted_rules = 3; // 已删除规则（增量用）
+}
+
+message SubscribeRequest {
+  string gateway_id = 1;
+  string last_event_id = 2;
+}
+
+message PolicyUpdate {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  PolicyUpdateType update_type = 3;
+  oneof update {
+    PolicyRule rule = 4;
+    string rule_id = 5;  // 用于删除事件
+  }
+}
+
+enum PolicyUpdateType {
+  POLICY_UPDATE_TYPE_UNSPECIFIED = 0;
+  POLICY_UPDATE_TYPE_CREATED = 1;
+  POLICY_UPDATE_TYPE_UPDATED = 2;
+  POLICY_UPDATE_TYPE_DELETED = 3;
+}

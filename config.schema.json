@@ -1,0 +1,567 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://atrusted.io/schemas/gateway-config/v1.0.0.json",
+  "title": "ATrust Gateway Configuration",
+  "description": "ATrust-ZTNA 网关与客户端配置Schema，遵循 OpenSpec SDD 规范。变更需通过 openapi-diff 校验兼容性。",
+  "type": "object",
+  "required": ["version", "gateway", "security"],
+  "definitions": {
+    "Version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9]+)?$",
+      "description": "语义化版本号"
+    },
+
+    "LoggingConfig": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["trace", "debug", "info", "warn", "error"],
+          "default": "info"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["json", "text"],
+          "default": "json"
+        },
+        "output": {
+          "type": "string",
+          "enum": ["stdout", "stderr", "file"],
+          "default": "stdout"
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "rotation": {
+          "type": "object",
+          "properties": {
+            "max_size_mb": {
+              "type": "integer",
+              "default": 100
+            },
+            "max_files": {
+              "type": "integer",
+              "default": 7
+            }
+          }
+        },
+        "syslog": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "default": 514
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["udp", "tcp"],
+              "default": "udp"
+            }
+          }
+        }
+      }
+    },
+
+    "TlsConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "min_version": {
+          "type": "string",
+          "enum": ["TLS1.2", "TLS1.3"],
+          "default": "TLS1.3"
+        },
+        "cipher_suites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "TLS密码套件列表（空=使用默认安全套件）"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string",
+          "description": "CA证书（用于客户端证书验证）"
+        },
+        "mtls": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "client_auth_mode": {
+              "type": "string",
+              "enum": ["require_verify_client_cert", "no_client_cert", "request_client_cert"],
+              "default": "require_verify_client_cert"
+            }
+          }
+        },
+        "gm_mode": {
+          "type": "object",
+          "description": "国密模式（启用SM2/3/4）",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "cert_file": {
+              "type": "string"
+            },
+            "key_file": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+
+    "InterceptorConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["ebpf", "iptables", "wfp", "ne", "tun", "proxy"],
+          "description": "拦截模式"
+        },
+        "cgroup_path": {
+          "type": "string",
+          "default": "/sys/fs/cgroup/net_cls/atrusted"
+        },
+        "proxy_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 1080,
+          "description": "本地SOCKS5代理端口"
+        },
+        "fallback": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["iptables", "http_proxy", "tun"],
+              "description": "降级模式"
+            }
+          }
+        },
+        "policy_map_size": {
+          "type": "integer",
+          "default": 65536,
+          "description": "eBPF LruHashMap 最大条目数"
+        },
+        "heartbeat_interval_secs": {
+          "type": "integer",
+          "default": 30
+        }
+      }
+    },
+
+    "GatewayConfig": {
+      "type": "object",
+      "required": ["listen_addr", "controller_url"],
+      "properties": {
+        "gateway_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "listen_addr": {
+          "type": "string",
+          "description": "监听地址",
+          "default": "0.0.0.0:443"
+        },
+        "spa": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "port": {
+              "type": "integer",
+              "default": 8883,
+              "description": "SPA UDP监听端口"
+            },
+            "totp_secret": {
+              "type": "string",
+              "description": "TOTP共享密钥（base32编码）"
+            },
+            "challenge_timeout_secs": {
+              "type": "integer",
+              "default": 30
+            }
+          }
+        },
+        "controller_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "upstream_proxy": {
+          "type": "object",
+          "description": "可选的上游HTTP代理（用于出站流量）",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "auth": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "ha": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "cluster_id": {
+              "type": "string"
+            },
+            "vrrp_ip": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+
+    "ControllerConfig": {
+      "type": "object",
+      "required": ["database_url", "jwt_secret_ref"],
+      "properties": {
+        "database_url": {
+          "type": "string",
+          "description": "数据库连接URL（postgresql://...）"
+        },
+        "database_pool_size": {
+          "type": "integer",
+          "default": 20
+        },
+        "listen_addr": {
+          "type": "string",
+          "default": "0.0.0.0:8080"
+        },
+        "external_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "对外暴露的URL（用于回调）"
+        },
+        "jwt_secret_ref": {
+          "type": "string",
+          "description": "JWT签名密钥引用（e.g., file:///secrets/jwt.key 或 env:JWT_SECRET）"
+        },
+        "jwt_access_token_ttl_secs": {
+          "type": "integer",
+          "default": 900
+        },
+        "jwt_refresh_token_ttl_secs": {
+          "type": "integer",
+          "default": 604800
+        },
+        "identity_providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "name"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["oauth2", "oidc", "saml", "ldap", "internal"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "config": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "session_heartbeat_timeout": {
+          "type": "integer",
+          "default": 90,
+          "description": "会话心跳超时（秒）"
+        }
+      }
+    },
+
+    "ClientConfig": {
+      "type": "object",
+      "required": ["server_url", "device_id"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "server_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "authentication": {
+          "type": "object",
+          "oneOf": [
+            {
+              "required": ["client_certificate"]
+            },
+            {
+              "required": ["client_secret"]
+            }
+          ],
+          "properties": {
+            "client_certificate": {
+              "type": "object",
+              "properties": {
+                "cert_file": {
+                  "type": "string"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pin": {
+                  "type": "string",
+                  "description": "SPKI指纹 pinning"
+                }
+              }
+            },
+            "client_secret": {
+              "type": "string"
+            }
+          }
+        },
+        "tunnel": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["always_on", "on_demand", "manual"],
+              "default": "on_demand"
+            },
+            "dns_servers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "excluded_apps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "不走隧道的应用（仅Windows/macOS）"
+            },
+            "split_tunnel": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "routes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "posture": {
+          "type": "object",
+          "properties": {
+            "check_interval_secs": {
+              "type": "integer",
+              "default": 300
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "antivirus_enabled",
+                  "antivirus_updated",
+                  "disk_encrypted",
+                  "os_patched",
+                  "screen_locked",
+                  "jailbreak_detected",
+                  "debugger_detected",
+                  "corporate_wifi"
+                ]
+              }
+            }
+          }
+        },
+        "autostart": {
+          "type": "boolean",
+          "default": true
+        },
+        "minimized_to_tray": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+
+    "SecurityConfig": {
+      "type": "object",
+      "required": ["allowed_algorithms"],
+      "properties": {
+        "allowed_algorithms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "SM2"]
+          },
+          "default": ["ES256"]
+        },
+        "token_clock_skew_secs": {
+          "type": "integer",
+          "default": 30
+        },
+        "revocation_check_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "key_rotation_days": {
+          "type": "integer",
+          "default": 90
+        },
+        "pinning": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "pins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "SPKI指纹列表"
+            },
+            "backup_pins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "PolicyRuleConfig": {
+      "type": "object",
+      "required": ["action", "dest_cidr"],
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "priority": {
+          "type": "integer",
+          "default": 100
+        },
+        "dest_cidr": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/[0-9]+$"
+        },
+        "dest_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "action": {
+          "type": "string",
+          "enum": ["ALLOW", "PROXY", "BLOCK", "MFA_REQUIRED"]
+        },
+        "user_whitelist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "device_min_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "require_mfa": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  },
+
+  "properties": {
+    "version": {
+      "$ref": "#/definitions/Version"
+    },
+
+    "gateway": {
+      "$ref": "#/definitions/GatewayConfig"
+    },
+
+    "controller": {
+      "$ref": "#/definitions/ControllerConfig"
+    },
+
+    "client": {
+      "$ref": "#/definitions/ClientConfig"
+    },
+
+    "security": {
+      "$ref": "#/definitions/SecurityConfig"
+    },
+
+    "logging": {
+      "$ref": "#/definitions/LoggingConfig"
+    },
+
+    "interceptor": {
+      "$ref": "#/definitions/InterceptorConfig"
+    },
+
+    "default_policy_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PolicyRuleConfig"
+      }
+    }
+  }
+}

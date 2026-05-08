@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.sangfor.com.cn)",
+      "WebSearch",
+      "Bash(npm list *)",
+      "Bash(npx ajv *)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(npx spectral *)",
+      "Bash(node -e \"const Ajv = require\\('ajv'\\); const ajv = new Ajv\\({strict: false}\\); const schema = require\\('./config.schema.json'\\); ajv.compile\\(schema\\); console.log\\('JSON Schema valid'\\)\")",
+      "Bash(cargo install *)",
+      "Bash(npx @hey-api/openapi-ts -i d:/Code/my-atrust/openapi.yaml -o d:/Code/my-atrust/client-desktop/src/generated)",
+      "Bash(cargo check *)",
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(RUST_LOG=info ./target/release/trust-ctl.exe)",
+      "Bash(curl -s http://localhost:8080/health)",
+      "Bash(RUST_LOG=info ./target/release/trust-gw.exe)",
+      "Bash(curl -v http://localhost:8080/health)",
+      "Bash(curl -s --max-time 5 http://127.0.0.1:8080/health)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":8080\")",
+      "Bash(curl -s -v http://localhost:8080/)",
+      "Bash(tasklist)",
+      "Bash(findstr trust *)",
+      "Bash(netsh advfirewall *)",
+      "Bash(taskkill /F /IM trust-ctl.exe)",
+      "Bash(taskkill //F //IM trust-ctl.exe)",
+      "Bash(./target/release/trust-ctl.exe)",
+      "Bash(curl -s http://localhost:8080/)",
+      "Bash(cargo doc *)",
+      "Bash(cargo tree *)",
+      "WebFetch(domain:crates.io)",
+      "Bash(cargo search *)",
+      "Bash(xargs cat *)",
+      "Bash(cargo update *)",
+      "Bash(./target/debug/trust-ctl.exe)",
+      "Bash(curl -s http://localhost:8888/health)",
+      "Bash(cmd //c \"taskkill /F /PID 20500\")"
+    ]
+  }
+}

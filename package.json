@@ -1,0 +1,17 @@
+{
+  "name": "my-atrust",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.97.0",
+    "@stoplight/spectral-cli": "^6.15.1",
+    "ajv": "^8.20.0"
+  }
+}

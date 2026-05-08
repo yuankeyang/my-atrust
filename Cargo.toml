@@ -1,0 +1,140 @@
+[workspace]
+resolver = "2"
+members = [
+    "trust-core",
+    "trust-ctl",
+    "trust-gw",
+    "trust-client",
+    "client-desktop/src-tauri",
+]
+exclude = ["eBPF/interceptor"]
+
+[workspace.package]
+version = "0.1.0-draft"
+edition = "2021"
+authors = ["ATrust Team"]
+license = "Proprietary"
+rust-version = "1.79"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = "0.7"
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "migrate", "uuid", "chrono"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# OpenAPI
+utoipa = "4"
+
+# JWT / Auth
+jsonwebtoken = "9"
+oauth2 = "4"
+totp-rs = { version = "5", features = ["otpauth"] }
+
+# Crypto
+rustls = "0.22"
+x509-parser = "0.16"
+pem = "3"
+pkcs8 = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+
+# 国密 (pre-release, optional)
+sm2 = "0.14.0-rc.9"
+sm3 = "0.5.0-rc.5"
+sm4 = "0.6.0-rc.3"
+
+# Concurrency
+dashmap = "5"
+parking_lot = "0.12"
+secrecy = "0.8"
+zeroize = "1"
+
+# gRPC / Protobuf
+prost = "0.13"
+prost-build = "0.13"
+tonic = "0.12"
+tokio-stream = "0.1"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.13"
+opentelemetry = "0.22"
+opentelemetry-otlp = "0.15"
+opentelemetry_sdk = "0.22"
+
+# Redis
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# Validation
+schemars = "0.8"
+jsonschema = "0.26"
+validator = { version = "0.18", features = ["derive"] }
+
+# Utils
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+anyhow = "1"
+url = "2"
+base64 = "0.22"
+bytes = "1"
+hex = "0.4"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Dev dependencies
+tokio-test = "0.4"
+mockall = "0.12"
+criterion = { version = "0.5", features = ["html_reports"] }
+cargo-fuzz = "0.11"
+insta = { version = "1", features = ["yaml"] }
+proptest = "1"
+tiny_http = "0.12"
+
+# Tauri
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+# eBPF
+aya = "0.13"
+memoffset = "0.9"
+libbpf-sys = "1"
+
+# Workspace members as dependencies
+trust-core = { path = "trust-core" }
+trust-client = { path = "trust-client" }
+
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = "unpacked"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.test]
+inherits = "dev"
+opt-level = 0
+
+[profile.bench]
+inherits = "release"
+incremental = false

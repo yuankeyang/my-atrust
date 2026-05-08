@@ -1,0 +1,22 @@
+# Cross-compilation targets for ATrust-ZTNA
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-Clinker=clang", "-Ctarget-feature=-crt-static"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-Clinker=clang"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = []
+
+[build]
+jobs = 4
+
+[http]
+proxy = "http://127.0.0.1:7897"
+
+[term]
+verbose = false
+color = "auto"

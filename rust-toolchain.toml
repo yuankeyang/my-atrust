@@ -1,0 +1,7 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy", "rust-src"]
+
+[workspace.metadata.aya]
+# aya eBPF 需要 nightly 工具链
+# 在 eBPF/interceptor/ 目录下单独使用 nightly

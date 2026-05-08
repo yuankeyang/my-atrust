@@ -1,0 +1,83 @@
+[package]
+name = "trust-ctl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "trust-ctl"
+path = "src/main.rs"
+
+[build-dependencies]
+prost-build.workspace = true
+
+[dependencies]
+trust-core.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# Web framework
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+# Database
+sqlx.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+# OpenAPI
+utoipa.workspace = true
+utoipa-swagger-ui = { version = "5", features = ["axum"] }
+
+# JWT / Auth
+jsonwebtoken.workspace = true
+oauth2.workspace = true
+totp-rs.workspace = true
+
+# Redis
+redis.workspace = true
+
+# Validation
+schemars.workspace = true
+jsonschema.workspace = true
+validator.workspace = true
+
+# gRPC / Protobuf
+prost.workspace = true
+tonic.workspace = true
+tokio-stream.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true
+
+# Utils
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+url.workspace = true
+base64.workspace = true
+bytes.workspace = true
+hex.workspace = true
+
+# HTTP client
+reqwest.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+tiny_http.workspace = true
+insta.workspace = true
+proptest.workspace = true
