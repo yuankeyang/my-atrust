@@ -37,7 +37,12 @@
       "Bash(cargo update *)",
       "Bash(./target/debug/trust-ctl.exe)",
       "Bash(curl -s http://localhost:8888/health)",
-      "Bash(cmd //c \"taskkill /F /PID 20500\")"
+      "Bash(cmd //c \"taskkill /F /PID 20500\")",
+      "Bash(git remote *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'chore: update gitignore and claude settings *)"
     ]
   }
 }

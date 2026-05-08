@@ -21,3 +21,6 @@ Cargo.lock
 
 # Node (if any)
 node_modules/
+.github/
+.claude/
+.cargo/
