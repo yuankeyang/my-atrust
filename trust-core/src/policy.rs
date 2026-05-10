@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 pub struct PolicyEngine {
     /// Minimum risk score threshold for MFA (0-100)
+    #[allow(dead_code)]
     mfa_threshold: u32,
 }
 

@@ -1,12 +1,15 @@
 {
   "name": "my-atrust",
   "version": "1.0.0",
-  "description": "",
+  "description": "ATrust-ZTNA Zero Trust Network Access",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "spectral lint openapi.yaml --fail-severity error",
+    "generate:api-client": "openapi-ts -i openapi.yaml -o client-desktop/src/generated/api --client axios",
+    "mock:server": "echo \"Mock server not implemented\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["zerotrust", "ztna", "security"],
   "author": "",
   "license": "ISC",
   "devDependencies": {

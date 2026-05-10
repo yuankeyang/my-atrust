@@ -11,27 +11,60 @@ mod proxy;
 mod interceptor;
 mod config;
 
-use std::net::SocketAddr;
-use tower_http::trace::TraceLayer;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::config::GatewayConfig;
+use crate::proxy::{ProxyService, ProxyState};
+use crate::spa::start_spa_server;
+use crate::interceptor::TrafficInterceptor;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting ATrust Gateway");
+    let config = GatewayConfig::default();
+    tracing::info!("Starting ATrust Gateway with config: {:?}", config);
 
-    // TODO: Initialize SPA handler (UDP port 8883)
-    // TODO: Initialize reverse proxy
-    // TODO: Initialize traffic interceptor
+    // Initialize proxy state
+    let proxy_state = Arc::new(ProxyState::new(config.clone()));
+    let proxy_service = ProxyService::new(proxy_state.clone());
 
-    // Placeholder: keep alive
-    tokio::signal::ctrl_c().await?;
+    // Initialize interceptor
+    let interceptor = Arc::new(TrafficInterceptor::new());
+    if let Err(e) = interceptor.start().await {
+        tracing::warn!("Failed to start interceptor, will use fallback: {}", e);
+        interceptor.fallback_to_legacy().await?;
+    }
+
+    // Start SPA server in background
+    let spa_handle = tokio::spawn(async move {
+        if let Err(e) = start_spa_server(&config.gateway_secret).await {
+            tracing::error!("SPA server error: {}", e);
+        }
+    });
+
+    tracing::info!("SPA server started on UDP port {}", config.spa_port);
+    tracing::info!("Gateway proxy ready");
+
+    // Wait for SPA server or shutdown signal
+    tokio::select! {
+        _ = spa_handle => {
+            tracing::warn!("SPA server terminated unexpectedly");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("Received shutdown signal");
+        }
+    }
+
+    // Cleanup
+    interceptor.unload().await?;
+    tracing::info!("ATrust Gateway shutdown complete");
 
     Ok(())
 }

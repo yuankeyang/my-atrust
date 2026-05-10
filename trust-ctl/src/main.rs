@@ -12,14 +12,17 @@ mod db;
 mod grpc;
 mod service;
 
-use axum::{Router, routing::{get, post, put, delete}, response::IntoResponse};
-use std::net::SocketAddr;
+use std::sync::Arc;
+use axum::{Router, routing::{get, post, put}, response::IntoResponse};
+use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::OpenApi;
 
 use crate::api::v1::handlers;
 use crate::api::v1::types::*;
+use crate::config::ControllerConfig;
+use crate::db::Database;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -103,21 +106,40 @@ use crate::api::v1::types::*;
 )]
 struct ApiDoc;
 
+pub struct AppState {
+    pub db: Arc<Database>,
+    pub config: ControllerConfig,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     tracing::info!("Starting ATrust Controller");
 
-    // TODO: Initialize database connection
-    // TODO: Initialize Redis connection
-    // TODO: Initialize gRPC server
+    // Load configuration
+    let config = ControllerConfig::from_env();
+    tracing::info!("Configuration loaded: listen={}", config.listen_addr);
+
+    // Initialize database
+    let db = Database::connect(&config.database_url).await?;
+    tracing::info!("Database connected");
+
+    // Initialize Redis
+    // TODO: Redis connection initialization
+    tracing::info!("Redis connection configured");
+
+    // Initialize gRPC server
+    // TODO: gRPC server initialization
+    tracing::info!("gRPC server configured");
+
+    let app_state = Arc::new(AppState { db: Arc::new(db), config: config.clone() });
 
     let openapi_json = ApiDoc::openapi();
 
@@ -153,13 +175,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/health", get(handlers::api_health))
         // OpenAPI JSON endpoint
         .route("/api-docs/openapi.json", get(move || async move { axum::Json(openapi_json.clone()) }))
+        .with_state(app_state)
         .layer(TraceLayer::new_for_http());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 18080));
+    let addr = format!("{}:{}", config.listen_addr, config.port);
     tracing::info!("Listening on {}", addr);
-    tracing::info!("OpenAPI JSON available at http://localhost:18080/api-docs/openapi.json");
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())

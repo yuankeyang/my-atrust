@@ -11,24 +11,32 @@ name = "trust-gw"
 path = "src/main.rs"
 
 [dependencies]
-trust-core.workspace = true
+trust-core = { workspace = true }
 
 # Async runtime
-tokio.workspace = true
+tokio = { workspace = true, features = ["full"] }
 
 # Web framework
-axum.workspace = true
-tower.workspace = true
-tower-http.workspace = true
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 
 # HTTP client
-reqwest.workspace = true
+reqwest = { workspace = true }
 
 # Crypto
-rustls.workspace = true
+rustls = { workspace = true }
+x509-parser = { workspace = true }
+pem = { workspace = true }
+pkcs8 = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
 
 # Redis
-redis.workspace = true
+redis = { workspace = true }
+
+# UDP
+socket2 = "0.5"
 
 # Observability
 tracing.workspace = true
@@ -45,3 +53,5 @@ uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+serde.workspace = true
+bytes.workspace = true
